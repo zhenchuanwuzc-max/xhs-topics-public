@@ -2,7 +2,7 @@
 
 > 本地 App，记录小红书/INS 选题：表格管理 → 选题→拍→发 状态流转 → 打分排序（流量/契合/变现）→ 外部热度参考 → 发布后数据回收。
 > 技术底座复刻 daily-todo（Python 单文件 + 单页 HTML + JSON + git 多机同步 + launchd 自启）。
-> 端口：**8773** ｜ 数据：`~/xhs-topics/topics.json` ｜ 仓库：<your-repo>（私有）
+> 端口：**8773** ｜ 数据：`~/xhs-topics-data/topics.json` ｜ 代码：本仓（公开）｜ 数据：私有数据仓
 
 ---
 
@@ -182,4 +182,4 @@ cd ~/xhs-topics && ./make_app.sh
 | 改了数据没同步 | 看 `/tmp/xhs-topics-sync.log` 和 `/tmp/xhs-topics-sync.status` |
 | 外部热度全是「—」 | 看 `/tmp/xhs-topics-heat.log`；多半是 Google Trends 429 限频（正常，过会再点刷新）或代理没通；中文长尾词本就常无数据 |
 | 热度 cron 没跑 | `launchctl list \| grep xhs-topics-heat`；手动跑：`cd ~/xhs-topics && ./venv/bin/python heat_refresh.py` |
-| 想直接改数据 | 编辑 `~/xhs-topics/topics.json`（合法 JSON），页面 8 秒内自动刷新 |
+| 想直接改数据 | 编辑 `~/xhs-topics-data/topics.json`（合法 JSON），页面 8 秒内自动刷新 |
