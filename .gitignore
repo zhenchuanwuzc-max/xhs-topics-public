@@ -1,0 +1,10 @@
+topics.json
+venv/
+build/
+dist/
+backups/
+__pycache__/
+*.pyc
+*.log
+.DS_Store
+.gh-token
