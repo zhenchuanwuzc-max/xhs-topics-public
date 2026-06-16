@@ -2,7 +2,7 @@
 
 > 本地 App，记录小红书/INS 选题：表格管理 → 选题→拍→发 状态流转 → 打分排序（流量/契合/变现）→ 外部热度参考 → 发布后数据回收。
 > 技术底座复刻 daily-todo（Python 单文件 + 单页 HTML + JSON + git 多机同步 + launchd 自启）。
-> 端口：**8773** ｜ 数据：`~/xhs-topics-data/topics.json` ｜ 代码：本仓（公开）｜ 数据：私有数据仓
+> 端口：**8773** ｜ 数据：`~/xhs-topics-data/topics.json`（私有数据仓）｜ 代码：本仓（公开开源）
 
 ---
 
