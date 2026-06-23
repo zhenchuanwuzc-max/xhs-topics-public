@@ -1,7 +1,8 @@
 topics.json
 venv/
-build/
-dist/
+# py2app 产物锚根目录，别误伤 vendor/vditor/dist（Vditor 引擎要进公开仓）
+/build/
+/dist/
 backups/
 __pycache__/
 *.pyc

@@ -445,6 +445,31 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(read_data())
             except Exception as e:
                 self._send_json({"error": str(e)}, 500)
+        elif self.path.startswith("/vendor/"):
+            # vendored 第三方静态资源（Vditor 编辑器 JS/CSS/lute 等），离线本地发不走 CDN。
+            # 走 get_resource_path：py2app 打包后 __file__ 在 zip 内，须解析到 Contents/Resources/。
+            rel = os.path.normpath(self.path[len("/vendor/"):].split("?", 1)[0].lstrip("/"))
+            if rel.startswith("..") or os.path.isabs(rel):
+                self._send_json({"error": "forbidden"}, 403)
+                return
+            fpath = get_resource_path(os.path.join("vendor", rel))
+            if os.path.isfile(fpath):
+                ext = os.path.splitext(fpath)[1]
+                ctype = {".js": "application/javascript", ".css": "text/css",
+                         ".wasm": "application/wasm", ".json": "application/json",
+                         ".map": "application/json"}.get(ext, "application/octet-stream")
+                try:
+                    with open(fpath, "rb") as f:
+                        body = f.read()
+                    self.send_response(200)
+                    self.send_header("Content-Type", ctype)
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                except Exception as e:
+                    self._send_json({"error": str(e)}, 500)
+            else:
+                self._send_json({"error": "vendor not found"}, 404)
         else:
             self._send_json({"error": "not found"}, 404)
 

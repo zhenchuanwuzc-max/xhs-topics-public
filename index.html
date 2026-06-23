@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>小红书选题库</title>
+<link rel="stylesheet" href="/vendor/vditor/dist/index.css">
 <style>
   :root {
     --bg: #f7f7f8; --card: #fff; --border: #ececef; --line: #f0f0f2;
@@ -58,6 +59,11 @@
   .c-note { color: var(--dim); font-size: 12px; margin-top: 2px; line-height: 1.4; word-break: break-word; cursor: text; border-radius: 4px; padding: 1px 3px; margin-left: -3px; margin-right: -3px; }
   .c-note:hover { background: #f0f0f2; }
   .c-note.empty-note { color: var(--faint); opacity: .65; }
+  /* 系列描述在表格行：渲染 MD + 限高，超出渐隐，点开编辑器看全文 */
+  .c-note.md-body { max-height: 7.6em; overflow: hidden; position: relative; }
+  .c-note.md-body.clamped::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1.5em;
+    background: linear-gradient(transparent, var(--card)); pointer-events: none; }
+  tbody tr:hover .c-note.md-body.clamped::after { background: linear-gradient(transparent, #fafafb); }
   .col-title { min-width: 200px; }
 
   .pf { font-size: 11px; padding: 2px 8px; border-radius: 6px; white-space: nowrap;
@@ -118,7 +124,7 @@
   .panel-mask { position: fixed; inset: 0; background: rgba(20,20,24,.28); z-index: 100;
     opacity: 0; pointer-events: none; transition: opacity .22s; }
   .panel-mask.show { opacity: 1; pointer-events: auto; }
-  .panel { position: fixed; top: 0; right: 0; height: 100%; width: 420px; max-width: 92vw;
+  .panel { position: fixed; top: 0; right: 0; height: 100%; width: 760px; max-width: 92vw;
     background: #fff; z-index: 101; box-shadow: -8px 0 32px rgba(0,0,0,.12);
     transform: translateX(100%); transition: transform .26s cubic-bezier(.32,.72,0,1);
     display: flex; flex-direction: column; }
@@ -138,6 +144,24 @@
     color: var(--text); resize: vertical; }
   .fld input:focus, .fld textarea:focus, .fld select:focus { border-color: var(--accent); }
   .fld textarea { min-height: 80px; line-height: 1.5; }
+  /* 写作区（描述/系列内容）：Vditor IR Markdown 编辑器，撑满面板高度，同金句 App 手感 */
+  .fld-grow { flex: 1; min-height: 0; }
+  .fld-grow #noteEditor { flex: 1; min-height: 0; display: flex; }
+  .fld-grow .vditor { height: 100% !important; width: 100%; display: flex; flex-direction: column;
+    border: 1px solid var(--border) !important; border-radius: 10px !important; }
+  .fld-grow .vditor-content { flex: 1; min-height: 0; }
+  .vditor-toolbar { background: #fafafb !important; border-bottom: 1px solid var(--border) !important; border-radius: 10px 10px 0 0 !important; }
+  .vditor-reset { font-size: 15px !important; line-height: 1.7 !important; font-family: inherit !important; color: var(--text) !important; }
+  .vditor-ir pre.vditor-reset, .vditor-content { background: #fff !important; }
+  /* Markdown 渲染（编辑器 + 表格行 .c-note 共用 .md-body）*/
+  .md-body strong { font-weight: 700; }
+  .md-body em { font-style: italic; }
+  .md-body ul, .md-body ol { margin: 2px 0; padding-left: 20px; }
+  .md-body li { margin: 1px 0; }
+  .md-body blockquote { margin: 3px 0; padding: 1px 0 1px 9px; border-left: 3px solid var(--accent-soft); color: var(--dim); }
+  .md-body h3, .md-body h4, .md-body h5 { font-size: 13.5px; margin: 3px 0; font-weight: 700; }
+  .md-body p { margin: 0 0 3px; }
+  .md-body p:last-child { margin-bottom: 0; }
   .panel-foot { padding: 14px 22px 20px; border-top: 1px solid var(--border); display: flex; gap: 10px; }
   .panel-foot .btn { flex: 1; padding: 11px 0; }
   .panel-foot .btn.ghost { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
@@ -183,9 +207,9 @@
       <label>标题</label>
       <input id="pTitle" placeholder="选题标题" autocomplete="off">
     </div>
-    <div class="fld">
-      <label>一句话角度 <span class="hint">（可选）</span></label>
-      <textarea id="pNote" placeholder="一句话说清这条选题的角度"></textarea>
+    <div class="fld fld-grow">
+      <label>描述 / 系列内容 <span class="hint">（可选 · 支持 Markdown：1./- 空格自动列表，# 标题，&gt; 引用）</span></label>
+      <div id="noteEditor"></div>
     </div>
     <div class="fld">
       <label>平台</label>
@@ -206,6 +230,7 @@
 
 <div class="toast" id="toast"></div>
 
+<script src="/vendor/vditor/dist/index.min.js"></script>
 <script>
 const STATUSES = [
   { key: "all",       name: "全部" },
@@ -242,6 +267,48 @@ function totalDisplay(t) {
   return totalScore(t);
 }
 function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+// 轻量 Markdown → HTML（表格行 .c-note 渲染用，同金句 App 渲染规则：标题/引用/有序无序列表/加粗斜体）
+function renderMarkdown(src) {
+  const inline = (t) => t
+    .replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[^*])\*([^*\n]+?)\*(?!\*)/g, '$1<em>$2</em>')
+    .replace(/(^|[^_])_([^_\n]+?)_(?!_)/g, '$1<em>$2</em>');
+  const lines = esc(src).split('\n');
+  let html = '', i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    const m = line.match(/^(#{1,3})\s+(.*)$/);
+    if (m) { const lv = m[1].length + 2; html += `<h${lv}>${inline(m[2])}</h${lv}>`; i++; continue; }
+    if (/^&gt;\s?/.test(line)) {
+      const buf = [];
+      while (i < lines.length && /^&gt;\s?/.test(lines[i])) { buf.push(inline(lines[i].replace(/^&gt;\s?/, ''))); i++; }
+      html += `<blockquote>${buf.join('<br>')}</blockquote>`; continue;
+    }
+    if (/^[-*]\s+/.test(line)) {
+      const buf = [];
+      while (i < lines.length && /^[-*]\s+/.test(lines[i])) { buf.push(`<li>${inline(lines[i].replace(/^[-*]\s+/, ''))}</li>`); i++; }
+      html += `<ul>${buf.join('')}</ul>`; continue;
+    }
+    if (/^\d+\.\s+/.test(line)) {
+      const buf = [];
+      while (i < lines.length && /^\d+\.\s+/.test(lines[i])) { buf.push(`<li>${inline(lines[i].replace(/^\d+\.\s+/, ''))}</li>`); i++; }
+      html += `<ol>${buf.join('')}</ol>`; continue;
+    }
+    if (line.trim() === '') { i++; continue; }
+    const buf = [];
+    while (i < lines.length && lines[i].trim() !== '' && !/^(#{1,3}\s|&gt;\s?|[-*]\s|\d+\.\s)/.test(lines[i])) {
+      buf.push(inline(lines[i])); i++;
+    }
+    html += `<p>${buf.join('<br>')}</p>`;
+  }
+  return html;
+}
+// 渲染后标记哪些 .c-note 被限高截断了（只有截断的才显示底部渐隐）
+function markClampedNotes() {
+  document.querySelectorAll('.c-note.md-body').forEach(el => {
+    el.classList.toggle('clamped', el.scrollHeight > el.clientHeight + 2);
+  });
+}
 function extHeatCell(t) {
   // 外部热度=Google搜索大盘热度，抓不到就空着（"—"），绝不编造
   if (t.ext_heat == null) {
@@ -322,6 +389,7 @@ function render() {
   }
   document.getElementById("meta").textContent =
     `${c.all} 条选题 · 更新 ${state.updated ? state.updated.replace("T"," ").slice(0,16) : "—"}`;
+  markClampedNotes();
 }
 
 function rowHTML(t) {
@@ -353,7 +421,7 @@ function rowHTML(t) {
     <tr data-id="${t.id}">
       <td class="col-title">
         <div class="c-title" data-edit-title="${t.id}" title="点击编辑标题">${esc(t.title)}</div>
-        <div class="c-note ${t.note?"":"empty-note"}" data-edit-note="${t.id}" title="点击编辑角度">${t.note?esc(t.note):"+ 加一句角度"}</div>
+        <div class="c-note ${t.note?"md-body":"empty-note"}" data-edit-note="${t.id}" title="点击编辑描述">${t.note?renderMarkdown(t.note):"+ 写点描述"}</div>
         <div class="kw" data-kw="${t.id}" title="点击编辑 Google 搜索关键词（默认用标题，改成通用词能提高热度命中）">🔑 <span class="kw-lbl">Google 关键词</span> ${esc(t.keyword || t.title)}</div>
         ${t.status==="published"?`<div class="expand" data-toggle="${t.id}">${expanded.has(t.id)?"▲ 收起数据":"▼ 展开数据"}${t.published_at?` · 发布 ${t.published_at.slice(5,10)}`:""}</div>`:""}
       </td>
@@ -474,6 +542,33 @@ let editingId = null;
 const panel = document.getElementById("panel");
 const panelMask = document.getElementById("panelMask");
 
+// Vditor IR 即时渲染 Markdown 编辑器（同金句 App：打 1./- 空格自动列表、# 标题、> 引用；getValue 取纯文本 MD 存库，同步架构不变）
+// 异步初始化（after 回调才 ready），用 noteVditorReady + __pending 处理首次设值时机
+let noteVditor = null, noteVditorReady = false;
+function ensureNoteEditor(initialValue) {
+  const val = initialValue || "";
+  if (noteVditor) {
+    if (noteVditorReady) noteVditor.setValue(val);
+    else noteVditor.__pending = val;
+    return;
+  }
+  noteVditor = new Vditor("noteEditor", {
+    mode: "ir",
+    cdn: location.origin + "/vendor/vditor",
+    height: "100%",
+    minHeight: 320,
+    placeholder: "这条选题想拍什么 / 系列里有哪几条 / hook、开头、要点……\n打 1. 或 - 再空格自动列表，# 标题，> 引用",
+    toolbar: ["headings", "bold", "italic", "strike", "|", "list", "ordered-list", "check", "quote", "line", "|", "undo", "redo"],
+    cache: { enable: false },
+    counter: { enable: false },
+    after: () => {
+      noteVditorReady = true;
+      noteVditor.setValue(noteVditor.__pending != null ? noteVditor.__pending : val);
+      noteVditor.__pending = null;
+    },
+  });
+}
+
 // openPanel(null) = 新增模式；openPanel(id) = 编辑模式。两种共用同一面板。
 function openPanel(id) {
   const isNew = id == null;
@@ -482,24 +577,25 @@ function openPanel(id) {
   editingId = id;
   document.getElementById("panelTitle").textContent = isNew ? "新选题" : "编辑选题";
   document.getElementById("pTitle").value = t ? (t.title || "") : "";
-  document.getElementById("pNote").value = t ? (t.note || "") : "";
   document.getElementById("pPlatform").value = t ? (t.platform || "xhs") : "xhs";
   document.getElementById("pKeyword").value = t ? (t.keyword || "") : "";
   // 新增时隐藏「Google 关键词」（建好后再调，避免一上来就让人填高级项）
   document.getElementById("fldKeyword").style.display = isNew ? "none" : "";
   panel.classList.add("show");
   panelMask.classList.add("show");
+  ensureNoteEditor(t ? (t.note || "") : "");
   setTimeout(() => document.getElementById("pTitle").focus(), 60);
 }
 function closePanel() {
   panel.classList.remove("show");
   panelMask.classList.remove("show");
   editingId = null;
+  if (noteVditor && noteVditorReady) noteVditor.setValue("");
 }
 async function savePanel() {
   const title = document.getElementById("pTitle").value.trim();
   if (!title) { toast("标题不能为空"); return; }
-  const note = document.getElementById("pNote").value.trim();
+  const note = (noteVditor && noteVditorReady ? noteVditor.getValue() : "").trim();
   const platform = document.getElementById("pPlatform").value;
   if (editingId == null) {
     // 新增
